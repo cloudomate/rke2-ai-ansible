@@ -49,6 +49,9 @@ ansible-rke2/
 │   │   │   └── metallb.yml    # MetalLB setup
 │   │   └── templates/
 │   │       └── config.yaml.j2 # RKE2 server config
+│   │       └── kubevip.yaml.j2    # kubevip setup
+│   │       └── metallb.yaml.j2    # MetalLB setup
+│   │       └── canal-config.yaml.j2    # Canal config
 │   ├── agent/                  # RKE2 agent setup
 │   │   ├── tasks/
 │   │   │   └── main.yml       # Agent node tasks
@@ -58,10 +61,29 @@ ansible-rke2/
 │       ├── tasks/
 │       │   ├── main.yml
 │       │   └── cert-manager.yml
+│       │   └── langfuse.yml
+│       │   └── minio.yml
+│       │   └── prometheus.yml
+│       │   └── grafana.yml
+│       │   └── loki.yml
+│       │   └── gpu.yml
+│       │   └── nfs.yml
+│       │   └── csi-nfs.yml
+│       │   └── metallb.yml
+│       │   └── ingress.yml
 │       └── templates/
 │           ├── cert-manager.yml.j2
 │           ├── cert-manager-issuer.yml.j2
-│           └── langfuse.yml.j2
+│           ├── langfuse.yml.j2
+│           ├── minio.yml.j2
+│           ├── kic.yml.j2
+│           ├── grafana.yml.j2
+│           ├── loki.yml.j2
+│           ├── metallb.yml.j2
+│           ├── csi-nfs.yml.j2
+│           ├── gpu-operator.yml.j2
+│           ├── ingress-nginx.yml.j2
+│           ├── monitoring.yml.j2
 ```
 
 ## Configuration
