@@ -1,0 +1,37 @@
+token: {{ rke2_config.token }}
+{% if inventory_hostname != groups['rke2_servers'][0] %}
+server: https://{{ hostvars[groups['rke2_servers'][0]].ansible_host }}:9345
+{% endif %}
+
+# Disable cloud controller manager
+disable-cloud-controller: {{ rke2_config.disable_cloud_controller | default(false) | bool }}
+
+tls-san:
+  - {{ api_server_vip }}
+{% for host in groups['rke2_servers'] %}
+  - {{ hostvars[host].ansible_host }}
+{% endfor %}
+{% if airgap_mode %}
+system-default-registry: {{ private_registry_url }}
+{% endif %}
+write-kubeconfig-mode: {{ rke2_config['write-kubeconfig-mode'] | default('0644') }}
+cni: {{ cni.type }}
+cluster-cidr: {{ rke2_config.pod_cidr }}
+service-cidr: {{ rke2_config.service_cidr }}
+{% if proxy.enabled %}
+http-proxy: {{ proxy.http_proxy }}
+https-proxy: {{ proxy.https_proxy }}
+no-proxy: {{ proxy.no_proxy }}
+{% endif %}
+{% if rke2_config.disable is defined %}
+disable:
+{% for item in rke2_config.disable %}
+  - {{ item }}
+{% endfor %}
+{% endif %}
+{% if hostvars[inventory_hostname].node_labels is defined %}
+node-label:
+{% for label in hostvars[inventory_hostname].node_labels %}
+  - {{ label }}
+{% endfor %}
+{% endif %}

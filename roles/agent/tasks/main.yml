@@ -1,0 +1,59 @@
+---
+# Create required directories
+- name: Create RKE2 directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+    - /etc/rancher/rke2
+    - /var/lib/rancher/rke2
+    - /var/lib/rancher/rke2/agent/images
+  become: true
+
+# Configure RKE2 agent
+- name: Configure RKE2 agent
+  template:
+    src: config.yaml.j2
+    dest: /etc/rancher/rke2/config.yaml
+    mode: '0600'
+  become: true
+
+# Non-air-gap mode installation
+- name: Download RKE2 installer script
+  when: not airgap_mode
+  get_url:
+    url: https://get.rke2.io
+    dest: /tmp/rke2-install.sh
+    mode: '0700'
+  register: download_installer
+  become: true
+
+- name: Install RKE2 agent in non-air-gap mode
+  when: not airgap_mode
+  shell: |
+    INSTALL_RKE2_VERSION={{ rke2_version }} /tmp/rke2-install.sh
+    systemctl enable rke2-agent
+    systemctl start rke2-agent
+  args:
+    creates: /usr/local/bin/rke2
+  become: true
+
+# Post-installation verification
+- name: Verify RKE2 agent status
+  systemd:
+    name: rke2-agent
+    state: started
+    enabled: yes
+  register: rke2_agent_service_status
+  become: true
+
+- name: Check RKE2 agent version
+  command: rke2 --version
+  register: rke2_version_check
+  changed_when: false
+  become: true
+
+- name: Display RKE2 agent status
+  debug:
+    var: rke2_version_check.stdout_lines 

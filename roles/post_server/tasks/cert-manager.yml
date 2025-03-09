@@ -1,0 +1,67 @@
+- name: Create manifests directory for temp configuration
+  ansible.builtin.file:
+    path: /tmp/rke2
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  run_once: true
+
+- name: Copy manifest for cert-manager to first master
+  ansible.builtin.template:
+    src: cert-manager.yml.j2
+    dest: /tmp/rke2/cert-manager.yml
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  run_once: true
+
+- name: Install cert-manager
+  ansible.builtin.command: >
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }} 
+    --kubeconfig {{kubeconfig_path}} apply -f /tmp/rke2/cert-manager.yml
+  run_once: true
+  become: true
+
+# Wait for cert-manager to be ready before configuring issuers
+- name: Wait for cert-manager controller to be ready
+  ansible.builtin.command: >
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }}
+    --kubeconfig {{kubeconfig_path}} wait --for=condition=Ready pods 
+    -l app.kubernetes.io/name=cert-manager -n cert-manager --timeout=300s
+  run_once: true
+  become: true
+
+- name: Wait for cert-manager webhook to be ready
+  ansible.builtin.command: >
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }}
+    --kubeconfig {{kubeconfig_path}} wait --for=condition=Ready pods 
+    -l app.kubernetes.io/name=webhook -n cert-manager --timeout=300s
+  run_once: true
+  become: true
+
+- name: Wait for cert-manager cainjector to be ready
+  ansible.builtin.command: >
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }}
+    --kubeconfig {{kubeconfig_path}} wait --for=condition=Ready pods 
+    -l app.kubernetes.io/name=cainjector -n cert-manager --timeout=300s
+  run_once: true
+  become: true
+
+# Configure issuer for certificates
+- name: Copy cert-manager issuer configuration
+  ansible.builtin.template:
+    src: cert-manager-issuer.yml.j2
+    dest: /tmp/rke2/cert-manager-issuer.yml
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  run_once: true
+  when: 
+    - cert_manager.letsencrypt.enabled | bool
+
+- name: Apply cert-manager DNS issuer configuration
+  ansible.builtin.command: >
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }}
+    --kubeconfig {{kubeconfig_path}} apply -f /tmp/rke2/cert-manager-issuer.yml
+  run_once: true
+  become: true
+  when: 
+    - cert_manager.letsencrypt.enabled | bool

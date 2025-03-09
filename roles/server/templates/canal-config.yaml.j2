@@ -1,0 +1,11 @@
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: rke2-cnicanal
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    flannel:
+      backend: {{ cni.flannel_backend }}
+      iface: "{{ ifname }}"

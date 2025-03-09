@@ -1,0 +1,29 @@
+---
+- name: Verify pre-requisites for RKE2
+  hosts: all
+  gather_facts: true
+  roles:
+    - role: pre_check
+      tags: pre_check
+
+- name: Install RKE2 Server
+  hosts: rke2_servers
+  gather_facts: true
+  roles:
+    - role: server
+      tags: server
+
+- name: Configure RKE2 Post Installation
+  hosts: rke2_servers
+  gather_facts: true
+  roles:
+    - role: post_server
+      tags: post
+
+- name: Install RKE2 Agent
+  hosts: rke2_agents
+  gather_facts: true
+  roles:
+    - role: agent
+      tags: agent
+

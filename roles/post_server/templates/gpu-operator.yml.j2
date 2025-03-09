@@ -1,0 +1,42 @@
+---
+# create namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ gpu_operator.namespace | default('gpu-operator') }}
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+---
+# install gpu operator
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: nvidia-gpu-operator
+  namespace: kube-system
+spec:
+  repo: https://helm.ngc.nvidia.com/nvidia
+  chart: gpu-operator
+  targetNamespace: {{ gpu_operator.namespace | default('gpu-operator') }}
+  createNamespace: false
+  valuesContent: |-
+    driver:
+      enabled: {{ gpu_operator.driver.enabled | default(false) }}
+    nfd:
+      enabled: {{ gpu_operator.nfd.enabled | default(true) }}
+    toolkit:
+      enabled: {{ gpu_operator.toolkit.enabled | default(false) }}
+{% if gpu_operator.toolkit.enabled %}
+      env:
+        - name: RUNTIME_CONFIG
+          value: /var/lib/rancher/rke2/agent/etc/containerd/config.toml
+        - name: CONTAINERD_CONFIG
+          value: /var/lib/rancher/rke2/agent/etc/containerd/config.toml
+        - name: RUNTIME_SOCKET
+          value: /run/k3s/containerd/containerd.sock
+        - name: CONTAINERD_SOCKET
+          value: /run/k3s/containerd/containerd.sock
+{% endif %}
+    migManager:
+      enabled: {{ gpu_operator.migManager.enabled | default(false) }}
+    mig:
+      strategy: {{ gpu_operator.mig.strategy | default('single') }}

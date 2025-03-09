@@ -1,0 +1,18 @@
+---
+- name: Create manifests directory on first master
+  ansible.builtin.file:
+    path: /var/lib/rancher/rke2/server/manifests
+    state: directory
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Copy metallb helm manifest to first master
+  ansible.builtin.template:
+    src: metallb.yaml.j2
+    dest: /var/lib/rancher/rke2/server/manifests/metallb.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  become: true

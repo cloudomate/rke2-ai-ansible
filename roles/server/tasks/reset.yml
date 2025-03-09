@@ -1,0 +1,16 @@
+---
+# Reset RKE2 server
+
+- name: Run RKE2 killall script
+  command:  /usr/local/bin/rke2-killall.sh
+  become: true
+  ignore_errors: true
+
+- name: Run RKE2 uninstall script
+  command:  /usr/local/bin/rke2-uninstall.sh
+  become: true
+  ignore_errors: true
+
+- name: Display reset completion message
+  debug:
+    msg: "RKE2 server has been reset on {{ inventory_hostname }}" 

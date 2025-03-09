@@ -1,0 +1,22 @@
+- name: Create manifests directory for temp configuration
+  ansible.builtin.file:
+    path: /tmp/rke2
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  run_once: true
+
+- name: Copy manifest for langfuse to first master
+  ansible.builtin.template:
+    src: langfuse.yml.j2
+    dest: /tmp/rke2/langfuse.yml
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  run_once: true
+
+- name: Install langfuse
+  ansible.builtin.command: >
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }} 
+    --kubeconfig {{kubeconfig_path}} apply -f /tmp/rke2/langfuse.yml
+  run_once: true
+  become: true

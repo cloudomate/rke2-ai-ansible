@@ -1,0 +1,63 @@
+- name: set kubeconfig path
+  ansible.builtin.set_fact:
+    kubeconfig_path: "{{ kubeconfig_path | default('/etc/rancher/rke2/rke2.yaml') }}"
+
+- name: Install nvidia gpu driver
+  ansible.builtin.include_tasks: gpu.yml
+  when:
+    - inventory_hostname == groups['rke2_servers'][0]
+    - gpu_operator.enabled | default(false) | bool
+  run_once: true
+
+- name: Configure metallb
+  ansible.builtin.include_tasks: metallb.yml
+  when:
+    - inventory_hostname == groups['rke2_servers'][0]
+    - metallb.enabled | default(false) | bool
+  run_once: true
+
+- name: Install ingress controller
+  ansible.builtin.include_tasks: ingress.yml
+  when:
+    - inventory_hostname == groups['rke2_servers'][0]
+    - ingress.enabled | default(false) | bool 
+  run_once: true
+
+- name: Install csi-nfs
+  ansible.builtin.include_tasks: csi-nfs.yml
+  when:
+    - inventory_hostname == groups['rke2_servers'][0]
+    - csi_nfs.enabled | default(false) | bool
+  run_once: true
+
+- name: Install cert-manager
+  ansible.builtin.include_tasks: cert-manager.yml
+  when:
+    - inventory_hostname == groups['rke2_servers'][0]
+    - cert_manager.enabled | default(false) | bool
+  run_once: true
+
+- name: Install kube-prometheus-stack
+  ansible.builtin.include_tasks: prometheus.yml
+  when:
+    - inventory_hostname == groups['rke2_servers'][0]
+    - kube_prometheus_stack.enabled | default(false) | bool
+  run_once: true
+
+- name: Install langfuse
+  ansible.builtin.include_tasks: langfuse.yml
+  when:
+    - inventory_hostname == groups['rke2_servers'][0]
+    - langfuse.enabled | default(false) | bool
+  run_once: true
+  
+- name: Remove tmp directory used for manifests
+  ansible.builtin.file:
+    path: /tmp/rke2
+    state: absent
+
+- name: Fetch kubeconfig from first server to playbook directory
+  ansible.builtin.include_tasks: kubeconfig.yml
+  when:
+    - inventory_hostname == groups['rke2_servers'][0]
+  run_once: true

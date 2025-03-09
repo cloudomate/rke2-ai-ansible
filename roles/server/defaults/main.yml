@@ -1,0 +1,4 @@
+kubevip:
+  bgp:
+    bgp_peers: []
+    bgp_peers_groups: ['server']

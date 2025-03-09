@@ -1,0 +1,14 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: minio
+  namespace: minio
+spec:
+  repo: https://helm.min.io/
+  chart: minio
+  version: {{ minio.chart_version }}
+  valuesContent: |-
+    minio:
+      mode: standalone
+      persistence:
+        enabled: true

@@ -1,0 +1,3 @@
+rke2_kubectl_binary: /var/lib/rancher/rke2/bin/kubectl
+kubeconfig_path: /etc/rancher/rke2/rke2.yaml
+metallb_available_timeout: 240s

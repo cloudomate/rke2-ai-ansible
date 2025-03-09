@@ -1,0 +1,45 @@
+- name: Create manifests directory for temp configuration
+  ansible.builtin.file:
+    path: /tmp/rke2
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  run_once: true
+
+# - name: set kubeconfig path
+#   ansible.builtin.set_fact:
+#     kubeconfig_path: "{{ kubeconfig_path | default('/etc/rancher/rke2/rke2.yaml') }}"
+
+- name: Check if NFD is already running
+  ansible.builtin.command: >
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }} --kubeconfig {{ kubeconfig_path }}
+    get nodes
+    -o=custom-columns='LABELS:metadata.labels'
+    --no-headers
+  register: nfd_check
+  changed_when: false
+  become: true
+
+- name: Set nfd_enabled fact
+  ansible.builtin.set_fact:
+    gpu_operator: "{{ gpu_operator | default({}) | combine({'nfd': {'enabled': not ('feature.node.kubernetes.io' in nfd_check.stdout)}}, recursive=True) }}"
+
+- name: Copy operator manifest to first master to deploy helm
+  ansible.builtin.template:
+    src: gpu-operator.yml.j2
+    dest: /tmp/rke2/gpu-operator.yml
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  run_once: true
+  become: true
+
+- name: Apply gpu operator manifest
+  ansible.builtin.command: >-
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }} 
+    --kubeconfig {{kubeconfig_path}} apply -f /tmp/rke2/gpu-operator.yml
+  register: apply_result
+  changed_when: false
+  run_once: true
+  until: apply_result.rc == 0
+  retries: 5
+  become: true

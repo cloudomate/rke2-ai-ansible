@@ -1,0 +1,53 @@
+---
+- name: Verify Cluster Status Before Adding Workers
+  hosts: rke2_servers[0]
+  gather_facts: false
+  tasks:
+    - name: Check if cluster is ready
+      shell: |
+        READY_SERVERS=$(/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes --no-headers | grep -w "control-plane" | grep -w "Ready" | wc -l)
+        EXPECTED_SERVERS={{ groups['rke2_servers'] | length }}
+        if [ "$READY_SERVERS" -eq "$EXPECTED_SERVERS" ]; then
+          echo "Cluster is ready with $READY_SERVERS control plane nodes"
+          exit 0
+        else
+          echo "Cluster is not ready. Found $READY_SERVERS ready control plane nodes, expected $EXPECTED_SERVERS"
+          exit 1
+        fi
+      register: cluster_status
+      until: cluster_status.rc == 0
+      retries: 3
+      delay: 10
+      become: true
+
+    - name: Get cluster token
+      shell: cat /var/lib/rancher/rke2/server/node-token
+      register: node_token
+      become: true
+
+    - name: Set cluster token fact
+      set_fact:
+        rke2_token: "{{ node_token.stdout }}"
+
+- name: Deploy RKE2 Worker Nodes
+  hosts: rke2_agents
+  gather_facts: true
+  roles:
+    - { role: common, tags: ['prereq', 'common'] }
+    - { role: rke2/agent, tags: ['agent'] }
+  become: true
+
+- name: Verify Worker Nodes Addition
+  hosts: rke2_servers[0]
+  gather_facts: false
+  tasks:
+    - name: Check all nodes status
+      shell: |
+        echo "=== Cluster Nodes Status ==="
+        /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get nodes
+      register: cluster_nodes
+      become: true
+
+    - name: Display cluster status
+      debug:
+        msg: "{{ cluster_nodes.stdout_lines }}" 

@@ -1,0 +1,31 @@
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: kubevip
+  namespace: kube-system
+spec:
+  repo: https://kube-vip.github.io/helm-charts
+  chart: kube-vip
+  targetNamespace: kube-system
+  createNamespace: false
+  valuesContent: |-
+      image:
+        tag: "{{ kubevip.version }}"
+      config:
+        address: "{{ api_server_vip }}"
+      env:
+        vip_interface: "{{ ifname }}"
+        vip_arp: "{{ true if kubevip.mode == 'ARP' else 'false' }}"
+        lb_enable: "false"
+        lb_port: "{{ api_server_port }}"
+        vip_cidr: "{{ api_server_vip | ansible.utils.ipsubnet | ansible.utils.ipaddr('prefix') }}"
+        cp_enable: "true"
+        cp_namespace: "kube-system"
+        vip_ddns: "false"
+        svc_enable: "{{ kubevip.svc_lb.enabled | default(false) | bool }}"
+        svc_election: "false"
+        vip_leaderelection: "true"
+        vip_leaseduration: "15"
+        vip_renewdeadline: "10"
+        vip_retryperiod: "2"

@@ -1,0 +1,108 @@
+---
+- name: Create manifests directory for temp configuration
+  ansible.builtin.file:
+    path: /tmp/rke2
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  run_once: true
+
+- name: Test metallb-system namespace
+  ansible.builtin.command: >-
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }} 
+    --kubeconfig {{ kubeconfig_path }} -n metallb-system
+  changed_when: false
+  run_once: true
+  become: true
+  retries: 10
+  delay: 10
+
+- name: Wait for MetalLB helm deployment to be completed from previous role
+  ansible.builtin.command: >-
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }} 
+    --kubeconfig {{ kubeconfig_path }} -n kube-system get HelmChart metallb
+  register: helm_exists
+  changed_when: false
+  run_once: true
+  become: true
+  retries: 30
+  delay: 10
+
+- name: Wait for metallb-controller deployment to be available
+  ansible.builtin.command: >-
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }} 
+    --kubeconfig {{ kubeconfig_path }} -n metallb-system wait deployment/metallb-controller 
+    --for=condition=Available=True --timeout=30s
+  register: controller_wait
+  changed_when: false
+  run_once: true
+  become: true
+  retries: 30
+  delay: 15
+
+- name: Copy metallb CRs manifest to first master
+  ansible.builtin.template:
+    src: metallb.yml.j2
+    dest: /tmp/rke2/metallb.yaml
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  run_once: true
+
+- name: Set metallb webhook service name
+  ansible.builtin.set_fact:
+    metallb_webhook_service_name: >-
+      {{
+        (
+          (metallb.controller_tag_version | regex_replace('^v', ''))
+          is
+          version('0.14.4', '<', version_type='semver')
+        ) | ternary(
+          'webhook-service',
+          'metallb-webhook-service'
+        )
+      }}
+
+- name: Test metallb-system webhook-service endpoint
+  ansible.builtin.command: >-
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }} 
+    --kubeconfig {{kubeconfig_path}} -n metallb-system get endpoints {{ metallb_webhook_service_name }}
+  changed_when: false
+  run_once: true
+  become: true
+
+- name: Apply metallb CRs
+  ansible.builtin.command: >-
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }} 
+    --kubeconfig {{kubeconfig_path}} apply -f /tmp/rke2/metallb.yaml
+    --timeout={{ metallb.available_timeout | default('240s') }}
+  register: this
+  changed_when: false
+  run_once: true
+  until: this.rc == 0
+  retries: 5
+  become: true
+
+- name: Test metallb-system resources for Layer 2 configuration
+  ansible.builtin.command: >-
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }} 
+    --kubeconfig {{kubeconfig_path}} -n metallb-system get {{ item }}
+  changed_when: false
+  run_once: true
+  when: metallb.mode == "layer2"
+  with_items:
+    - IPAddressPool
+    - L2Advertisement
+  become: true
+
+- name: Test metallb-system resources for BGP configuration
+  ansible.builtin.command: >-
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }} 
+    --kubeconfig {{kubeconfig_path}} -n metallb-system get {{ item }}
+  changed_when: false
+  run_once: true
+  when: metallb.mode == "bgp"
+  with_items:
+    - IPAddressPool
+    - BGPPeer
+    - BGPAdvertisement
+  become: true

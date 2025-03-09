@@ -1,0 +1,197 @@
+---
+# Deployment Mode
+airgap_mode: false  # Set to true for air-gapped installations
+
+# allocate a VIP for the API server
+api_server_vip: "192.168.4.14"
+api_server_port: "6443"
+
+# nic interface name on host to be used for the cluster
+ifname: "enp5s0"
+
+# RKE2 server configuration
+rke2_config:
+  version: "v1.31.5+rke2r1"
+  install_path: "/usr/local"
+  token: "your-secure-token-goes-here"
+  write-kubeconfig-mode: "0644"
+  disable-cloud-controller: true
+  disable:
+   - rke2-ingress-nginx  # we will deploy ingress-nginx separately
+   - rke2-snapshot-controller
+   - rke2-snapshot-controller-crd
+   - rke2-snapshot-validation-webhook 
+  pod_cidr: "10.42.0.0/16"
+  service_cidr: "10.43.0.0/16"
+
+# CNI configuration, parameters are different for different CNI types
+cni: 
+  type: "canal"  # Options: canal, cilium, calico
+  flannel_backend: "vxlan"
+  mtu: 1450
+  iface: "{{ ifname }}"
+
+# kube-vip configuration
+kubevip:
+  enabled: true
+  mode: "ARP"
+  version: "v0.8.4"
+  # service loadbalancer is for external service loadbalancing, if enabled, metallb will be ignored
+  # metallb is for preferred service loadbalancing method, as it has more features
+  svc_lb:
+    enabled: false
+    ip_pool_range: "192.168.4.40-192.168.4.60"
+
+# MetalLB configuration and variables, if kubevip svc_lb is enabled, this will be ignored
+metallb:
+  enabled: true
+  controller_tag_version: "v0.14.9"
+  speaker_tag_version: "v0.14.9"
+  mode: "layer2" # Options: layer2, bgp
+  ip_pool_range: "192.168.4.40-192.168.4.60"
+  # bgp configutation only used when mode is bgp
+  bgp:
+    enabled: false
+    my_asn: 65000
+    peer_asn: 65001
+    peer_address: "192.168.4.1"
+    frr_enabled: false
+    frr_image_tag: "9.1.0"
+
+# ingress class to be used
+ingress:
+  enabled: true
+  class: "ingress-nginx" # available options: ingress-nginx, traefik, kic
+  className: nginx
+
+# gpu operator
+gpu_operator:
+  enabled: true
+  driver:
+    enabled: true
+  toolkit:
+    enabled: true
+  migManager:
+    enabled: true
+  mig:
+    strategy: "single" # available options: single, mixed
+
+# csi for nfs
+csi_nfs: 
+  enabled: true
+  storage_class_name: "csi-nfs"
+  server: "192.168.4.181"
+  path: "/mnt/nfsshare"
+  mount_options:
+    - "nfsvers=4.1"
+
+# to use minio cluster wide, create minio as a part of cluster deployment
+minio:
+  enabled: false
+  storageClass: default
+
+# Monitoring Stack Configuration, for cluster and application monitoring 
+kube_prometheus_stack: 
+  enabled: true  # Enable prometheus deployment, default is false
+  stack_version: "55.5.0"
+  persistence:
+    enabled: false
+    storage_class: "local-path"
+  retention: "10d" 
+  grafana:
+    service_type: "LoadBalancer"
+    enabled: true
+    storage_size: "10Gi"
+    admin_password: "your-secure-password"  # Change this!
+  loki:
+    enabled: true
+    minio:
+      enabled: true
+    storage_size: "10Gi"
+
+# application domain configuration
+app:
+ name: cpod
+ domain: includeai.ai
+ is_domain_public: true
+
+# cert manager for TLS certificate management
+cert_manager:
+  enabled: true
+  version: v1.14.3
+  letsencrypt: 
+    enabled: true
+    email: "ys@imys.in"
+    use_wildcard: false
+    dns:
+      # Choose your DNS provider: cloudflare, godaddy, or namecheap
+      provider: cloudflare
+      # Cloudflare configuration
+      cloudflare:
+        email: "ys@imys.in"
+        api_token: "your-cloudflare-api-token"
+      # GoDaddy configuration
+      godaddy:
+        api_key: "your-godaddy-api-key"
+        api_secret: "your-godaddy-api-secret"
+      # Namecheap configuration
+      namecheap:
+        api_key: "your-namecheap-api-key"
+        username: "your-namecheap-username"  # Usually your Namecheap username
+    staging: false
+    production:
+      server: https://acme-v02.api.letsencrypt.org/directory
+    staging:
+      server: https://acme-staging-v02.api.letsencrypt.org/directory
+
+
+## https://github.com/langfuse/langfuse-k8s/blob/main/charts/langfuse/values.yaml, we will deploy as a part of application deployment
+langfuse:
+  enabled: false
+  chart_version: 1.0.0-rc.12
+  salt: 57e1bf05566cd0145619ec4bfdf832349cd7e5de6e64735928b8d768b4b229d7 # generate via `openssl rand -hex 32`
+  encryption_key: 53109c680f802b9fbe598bbc0a1feb8cd94eea60b3e5340e83f9fd1d742f4527 # generate via `openssl rand -hex 32`
+  nextauth_secret: nextauth_secret # input your own secret
+  postgresql_password: postgres # input your own password
+  clickhouse_password: clickhouse_password # input your own password
+  redis_password: redis_password # input your own password
+  clickhouse:
+    replicaCount: 1 # for production, set to 3
+    zookeeper:
+      replicaCount: 1 # for production, set to 3
+  s3:
+    deploy: true # to deploy minio as a part of langfuse deployment, for production use s3 from clusterwide or external s3
+  ingress:
+    enabled: true
+    additionalLabels: {}
+    className: "{{ ingress.className }}"
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    hosts:
+      - host: "langfuse.{{ app.domain }}"
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      enabled: true
+
+# Air gap configuration (used when airgap_mode is true)
+private_registry_url: "registry.example.com"
+private_registry_username: "username"
+private_registry_password: "password"
+
+# Air gap artifacts (used when airgap_mode is true)
+artifact_path: "/path/to/rke2/artifacts"
+images_tarball: "{{ artifact_path }}/rke2-images.linux-amd64.tar.gz"
+installer: "{{ artifact_path }}/rke2.linux-amd64.tar.gz"
+
+# System requirements
+min_memory_mb: 4096
+min_cpu_count: 2
+
+# Proxy settings (if needed)
+proxy:
+  enabled: false
+  http_proxy: ""
+  https_proxy: ""
+  no_proxy: "localhost,127.0.0.1,{{ rke2_config.pod_cidr }},{{ rke2_config.service_cidr }}"

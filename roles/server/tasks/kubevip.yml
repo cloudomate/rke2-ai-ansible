@@ -1,0 +1,25 @@
+---
+- name: Create manifests directory on first master
+  ansible.builtin.file:
+    path: /var/lib/rancher/rke2/server/manifests
+    state: directory
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+# Set BGP peers fact if BGP mode is enabled
+- name: Set _kube_vip_bgp_peers fact
+  ansible.builtin.set_fact:
+    _kubevip_bgp_peers: "{{ lookup('community.general.merge_variables', '^kubevip.bgp.peers__.+$', initial_value=kubevip.bgp.peers, groups=kubevip.bgp.peers_groups) }}"  # yamllint disable-line rule:line-length
+  when: kubevip.mode == "BGP"
+
+# Configure add-ons only on first server, copy manifest
+- name: Copy kube-vip manifest on first server
+  template:
+    src: kubevip.yaml.j2
+    dest: /var/lib/rancher/rke2/server/manifests/kubevip.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  become: true

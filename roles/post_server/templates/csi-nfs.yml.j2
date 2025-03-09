@@ -1,0 +1,29 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: csi-driver-nfs
+  namespace: kube-system
+spec:
+  repo: https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts
+  chart: csi-driver-nfs
+  targetNamespace: kube-system
+  createNamespace: false
+  version: v4.10.0
+  valuesContent: |
+{% if csi_nfs.enabled | default(false) | bool %}
+    storageClass:
+      create: true
+      name: "{{ csi_nfs.storage_class_name }}"
+      defaultClass: true
+      reclaimPolicy: Delete
+      allowVolumeExpansion: true
+{% if csi_nfs.mount_options is defined %}
+      mountOptions:
+{% for option in csi_nfs.mount_options %}
+        - "{{ option }}"
+{% endfor %}
+{% endif %}
+      parameters:
+        server: "{{ csi_nfs.server }}"
+        share: "{{ csi_nfs.path }}"
+{% endif %}

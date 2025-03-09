@@ -1,0 +1,24 @@
+---
+# Distribution specific package names
+debian_packages:
+  - iptables
+  - iptables-persistent
+  - netfilter-persistent
+
+redhat_packages:
+  - iptables
+  - iptables-services
+
+suse_packages:
+  - iptables
+  - iptables-legacy  # For newer versions
+
+# Service names
+iptables_service_map:
+  Debian:
+    - netfilter-persistent
+    - iptables
+  RedHat:
+    - iptables
+  Suse:
+    - iptables 

@@ -1,0 +1,36 @@
+---
+# create namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: metallb-system
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
+---
+# install metallb
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: metallb
+  namespace: kube-system
+spec:
+  repo: https://metallb.github.io/metallb
+  chart: metallb
+  targetNamespace: metallb-system
+  createNamespace: false
+  valuesContent: |-
+    speaker:
+      image:
+        repository: quay.io/metallb/speaker
+        tag: {{ metallb.speaker_tag_version | default('v0.14.9') }}
+    controller:
+      image:
+        repository: quay.io/metallb/controller
+        tag: {{ metallb.controller_tag_version | default('v0.14.9') }}
+    frr:
+      enabled: {{ metallb.mode == 'bgp' and metallb.frr.enabled | bool }}
+      image:
+        repository: quay.io/frrouting/frr
+        tag: {{ metallb.bgp.frr_image_tag | default('9.1.0') }}

@@ -1,0 +1,25 @@
+---
+- name: Reset RKE2 Cluster
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Reset RKE2 servers
+      include_role:
+        name: server
+        tasks_from: reset
+      when: inventory_hostname in groups['rke2_servers']
+
+    - name: Reset RKE2 agents
+      include_role:
+        name: agent
+        tasks_from: reset
+      when: inventory_hostname in groups['rke2_agents']
+
+    - name: Display completion message
+      debug:
+        msg: 
+          - "RKE2 cluster has been reset:"
+          - "- Servers reset: {{ groups['rke2_servers'] | join(', ') }}"
+          - "- Agents reset: {{ groups['rke2_agents'] | default([]) | join(', ') }}"
+          - "- Inventory file removed"
+      run_once: true 

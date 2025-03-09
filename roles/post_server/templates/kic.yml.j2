@@ -1,0 +1,10 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: kic
+  namespace: kube-system
+spec:
+  repo: https://charts.konghq.com
+  chart: kong
+  targetNamespace: kong
+  createNamespace: true

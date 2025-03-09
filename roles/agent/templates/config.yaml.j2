@@ -1,0 +1,15 @@
+server: https://{{ api_server_vip }}:{{ rke2_config.node_join_port | default(9345) }}
+token: {{ rke2_config.token }}
+{% if hostvars[inventory_hostname].node_labels is defined %}
+node-label:
+{% for label in hostvars[inventory_hostname].node_labels %}
+  - {{ label }}
+{% endfor %}
+{% endif %}
+
+{% if hostvars[inventory_hostname].node_taints is defined %}
+node-taint:
+{% for taint in hostvars[inventory_hostname].node_taints %}
+  - {{ taint }}
+{% endfor %}
+{% endif %} 

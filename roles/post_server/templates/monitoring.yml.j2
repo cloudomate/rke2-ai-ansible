@@ -1,0 +1,76 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: kube-prometheus-stack
+  namespace: kube-system
+spec:
+  repo: https://prometheus-community.github.io/helm-charts
+  chart: kube-prometheus-stack
+  targetNamespace: monitoring
+  version: {{ kube_prometheus_stack.version | default('55.5.0') }}
+  valuesContent: |-
+    grafana:
+      adminPassword: {{ kube_prometheus_stack.grafana.admin_password | default('prom-operator') }}
+      persistence:
+        enabled: {{ kube_prometheus_stack.persistence.enabled | default(false) | bool }}
+        size: {{ kube_prometheus_stack.grafana.storage_size | default('10Gi') }}
+        storageClassName: {{ kube_prometheus_stack.persistence.storage_class | default('local-path') }}
+      service:
+        type: {{ kube_prometheus_stack.grafana.service_type | default('LoadBalancer') }}
+      dashboards:
+        default:
+          node-exporter:
+            gnetId: 1860  # Node Exporter Dashboard
+            revision: 29
+            datasource: Prometheus
+          kubernetes-cluster:
+            gnetId: 15661  # Kubernetes Cluster Monitoring
+            revision: 1
+            datasource: Prometheus
+{% if gpu_operator.enabled | default(false) | bool %}
+          gpu-metrics:
+            gnetId: 12239  # NVIDIA DCGM Exporter Dashboard
+            revision: 2
+            datasource: Prometheus
+{% endif %}
+    prometheus:
+      prometheusSpec:
+        retention: {{ kube_prometheus_stack.retention | default('14d') }}
+        scrapeInterval: "{{ kube_prometheus_stack.prometheus.scrape_interval | default('10s') }}"
+        evaluationInterval: "{{ kube_prometheus_stack.prometheus.evaluation_interval | default('10s') }}"
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: {{ kube_prometheus_stack.persistence.storage_class | default('local-path') }}
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: {{ kube_prometheus_stack.prometheus.storage_size | default('50Gi') }}
+        serviceMonitorSelectorNilUsesHelmValues: false
+{% if gpu_operator.enabled | default(false) | bool %}
+        additionalScrapeConfigs:
+        - job_name: gpu-metrics
+          scrape_interval: 10s
+          metrics_path: /metrics
+          scheme: http
+          kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+              - gpu-operator
+          relabel_configs:
+          - source_labels: [__meta_kubernetes_endpoints_name]
+            action: drop
+            regex: .*-node-feature-discovery-master
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            action: replace
+            target_label: kubernetes_node
+{% endif %}

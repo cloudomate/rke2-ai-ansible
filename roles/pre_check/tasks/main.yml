@@ -1,0 +1,236 @@
+---
+# Check and disable firewalld as it conflicts with default networking
+- name: Check firewalld status
+  ansible.builtin.service_facts:
+
+- name: Verify firewalld is disabled
+  ansible.builtin.assert:
+    that: 
+      - not (ansible_facts.services['firewalld.service'] is defined and ansible_facts.services['firewalld.service'].state == 'running')
+    fail_msg: "firewalld is running and must be disabled as it conflicts with RKE2's default Canal networking"
+    success_msg: "firewalld is properly disabled"
+
+# Check if NetworkManager is installed and running
+- name: Check if NetworkManager is installed
+  ansible.builtin.package_facts:
+    manager: auto
+  
+- name: Check NetworkManager status
+  ansible.builtin.service_facts:
+
+- name: Set NetworkManager facts
+  ansible.builtin.set_fact:
+    networkmanager_installed: "{{ 'NetworkManager' in ansible_facts.packages }}"
+    networkmanager_enabled: "{{ 'NetworkManager.service' in ansible_facts.services and ansible_facts.services['NetworkManager.service'].state == 'running' }}"
+
+# Configure NetworkManager if installed and enabled
+- name: Configure NetworkManager to ignore CNI interfaces
+  when: networkmanager_installed and networkmanager_enabled
+  block:
+    - name: Create NetworkManager CNI configuration
+      ansible.builtin.copy:
+        dest: /etc/NetworkManager/conf.d/rke2-canal.conf
+        content: |
+          [keyfile]
+          unmanaged-devices=interface-name:flannel*;interface-name:cali*;interface-name:tunl*;interface-name:vxlan.calico;interface-name:vxlan-v6.calico;interface-name:wireguard.cali;interface-name:wg-v6.cali
+        mode: '0644'
+      become: true
+      notify: Restart NetworkManager
+
+    # Check and disable nm-cloud-setup services (RHEL 8.4+ issue)
+    - name: Check nm-cloud-setup services
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      with_items:
+        - nm-cloud-setup.service
+        - nm-cloud-setup.timer
+      become: true
+      ignore_errors: true
+
+    - name: Ensure NetworkManager configuration is applied
+      ansible.builtin.service:
+        name: NetworkManager
+        state: restarted
+      become: true
+      when: networkmanager_enabled
+
+# Check if Wicked is installed and running
+- name: Set Wicked facts
+  ansible.builtin.set_fact:
+    wicked_installed: "{{ 'wicked' in ansible_facts.packages }}"
+    wicked_enabled: "{{ 'wicked.service' in ansible_facts.services and ansible_facts.services['wicked.service'].state == 'running' }}"
+
+# Configure Wicked if installed and enabled
+- name: Configure Wicked forwarding
+  when: wicked_installed and wicked_enabled
+  block:
+    - name: Create sysctl configuration for Wicked
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/90-rke2.conf
+        content: |
+          net.ipv4.conf.all.forwarding=1
+          net.ipv6.conf.all.forwarding=1
+        mode: '0644'
+      become: true
+      notify: Restart Wicked
+
+    - name: Configure Wicked forwarding in config
+      ansible.builtin.lineinfile:
+        path: /etc/sysconfig/network/config
+        regexp: '^IP_FORWARD='
+        line: 'IP_FORWARD=yes'
+        create: true
+      become: true
+      notify: Restart Wicked
+
+# Check and install iptables
+- name: Check if iptables is installed
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Set distribution-specific package list
+  ansible.builtin.set_fact:
+    iptables_packages: >-
+      {{
+        debian_packages if ansible_os_family == 'Debian'
+        else redhat_packages if ansible_os_family == 'RedHat'
+        else suse_packages if ansible_os_family == 'Suse'
+        else ['iptables']
+      }}
+
+- name: Install iptables and related packages
+  ansible.builtin.package:
+    name: "{{ iptables_packages }}"
+    state: present
+  when: "'iptables' not in ansible_facts.packages"
+  become: true
+
+- name: Verify iptables installation
+  ansible.builtin.assert:
+    that:
+      - "'iptables' in ansible_facts.packages"
+    fail_msg: "Failed to install iptables. Required for Canal networking and hostPort functionality."
+    success_msg: "iptables is installed."
+
+- name: Set iptables service names
+  ansible.builtin.set_fact:
+    service_names: "{{ iptables_service_map[ansible_os_family] | default(['iptables']) }}"
+
+# Verify system requirements
+- name: Verify minimum system requirements
+  ansible.builtin.assert:
+    that:
+      - ansible_memtotal_mb >= min_memory_mb
+      - ansible_processor_vcpus >= min_cpu_count
+    fail_msg: |
+      System does not meet minimum requirements:
+      Required Memory: {{ min_memory_mb }}MB (Found: {{ ansible_memtotal_mb }}MB)
+      Required CPUs: {{ min_cpu_count }} (Found: {{ ansible_processor_vcpus }})
+    success_msg: "System meets minimum requirements"
+
+# Check kernel modules
+- name: Verify required kernel modules
+  ansible.builtin.modprobe:
+    name: "{{ item }}"
+    state: present
+  become: true
+  with_items:
+    - br_netfilter
+    - overlay
+    - nf_conntrack
+  ignore_errors: true
+
+# Check and configure sysctl parameters
+- name: Configure required sysctl parameters
+  ansible.builtin.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  become: true
+  with_items:
+    - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { key: 'net.ipv4.ip_forward', value: '1' }
+    - { key: 'net.ipv4.conf.all.forwarding', value: '1' }
+    - { key: 'net.ipv6.conf.all.forwarding', value: '1' }
+    - { key: 'kernel.panic', value: '10' }
+    - { key: 'kernel.panic_on_oops', value: '1' }
+
+# Check network interfaces
+- name: Gather network interface facts
+  ansible.builtin.setup:
+    gather_subset:
+      - network
+
+- name: Check if iproute2 is installed
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: Ensure iproute2 is installed
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - "{{ 'iproute2' if ansible_os_family in ['Debian', 'Ubuntu'] else 'iproute' }}"
+  when: "'iproute2' not in ansible_facts.packages and 'iproute' not in ansible_facts.packages"
+  become: true
+
+- name: Verify required network interfaces exist
+  ansible.builtin.assert:
+    that:
+      - ifname in ansible_interfaces
+    fail_msg: |
+      Required network interface '{{ ifname }}' does not exist.
+      Available interfaces: {{ ansible_interfaces | join(', ') }}
+    success_msg: "Required network interface '{{ ifname }}' exists"
+  when: ifname is defined
+
+- name: Get interface state (primary method)
+  ansible.builtin.command: ip link show {{ ifname }}
+  register: interface_state_ip
+  changed_when: false
+  failed_when: false
+  when: ifname is defined
+
+- name: Get interface state (fallback method)
+  ansible.builtin.stat:
+    path: "/sys/class/net/{{ ifname }}/operstate"
+  register: interface_operstate
+  when: ifname is defined
+
+- name: Read interface operstate (fallback method)
+  ansible.builtin.command: cat "/sys/class/net/{{ ifname }}/operstate"
+  register: interface_state_fallback
+  changed_when: false
+  failed_when: false
+  when: 
+    - ifname is defined
+    - interface_operstate.stat.exists
+
+- name: Verify interface is up and operational
+  ansible.builtin.assert:
+    that: >-
+      (interface_state_ip.rc == 0 and 'state UP' in interface_state_ip.stdout) or
+      (interface_state_fallback.rc == 0 and 'up' in interface_state_fallback.stdout.lower())
+    fail_msg: |
+      Network interface '{{ ifname }}' is not properly configured:
+      - Interface exists: {{ ifname in ansible_interfaces }}
+      - Interface state: {{ interface_state_ip.stdout if interface_state_ip.rc == 0 else 'Unknown (ip command failed)' }}
+      - Operstate: {{ interface_state_fallback.stdout if interface_state_fallback.rc == 0 else 'Unknown' }}
+    success_msg: "Network interface '{{ ifname }}' is UP and ready"
+  when: ifname is defined
+
+# Check for Calico vxlan issues (Ubuntu 18.04, 20.04, openSUSE Leap 15.3)
+- name: Get OS information
+  ansible.builtin.setup:
+    filter: ansible_distribution*,ansible_os_family
+
+- name: Warn about potential Calico vxlan checksum issue
+  ansible.builtin.debug:
+    msg: "Warning: This OS version ({{ ansible_distribution }} {{ ansible_distribution_version }}) may be affected by Calico vxlan checksum offloading issues."
+  when: >
+    (ansible_distribution == "Ubuntu" and ansible_distribution_version is version('20.04', '<=') and ansible_distribution_version is version('18.04', '>=')) or
+    (ansible_distribution == "openSUSE Leap" and ansible_distribution_version is version('15.3', '==')) 

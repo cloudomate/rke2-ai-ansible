@@ -1,0 +1,24 @@
+---
+# System Requirements Check
+- name: Check minimum memory requirements
+  assert:
+    that:
+      - ansible_memtotal_mb >= 3192
+    fail_msg: "Minimum 4GB of memory required. Current: {{ ansible_memtotal_mb }}MB"
+  tags: prereq
+
+- name: Check minimum CPU requirements
+  assert:
+    that:
+      - ansible_processor_vcpus >= 2
+    fail_msg: "Minimum 2 vCPUs required. Current: {{ ansible_processor_vcpus }}"
+  tags: prereq
+
+- name: Check OS distribution
+  assert:
+    that:
+      - ansible_distribution in ['RedHat', 'CentOS', 'Ubuntu']
+      - (ansible_distribution == 'Ubuntu' and ansible_distribution_major_version|int >= 20) or
+        (ansible_distribution in ['RedHat', 'CentOS'] and ansible_distribution_major_version|int >= 8)
+    fail_msg: "Unsupported OS. Required: RHEL/CentOS 8+ or Ubuntu 20.04+"
+  tags: prereq
