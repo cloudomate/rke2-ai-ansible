@@ -1,271 +1,140 @@
-# RKE2 Cluster Deployment with Ansible
+# Ansible RKE2 Cluster Deployment
 
-This Ansible project deploys a high-availability RKE2 Kubernetes cluster with support for both internet-connected and air-gapped environments, kube-vip for HA control plane, and MetalLB for load balancing.
+This Ansible project automates the deployment of a highly available RKE2 Kubernetes cluster with various integrated components and applications.
 
 ## Features
 
-- Support for both internet-connected and air-gapped deployments
-- Private registry integration
-- High-availability control plane with kube-vip
-- MetalLB for bare metal load balancing
-- Automated deployment with Ansible
-- Comprehensive system prerequisite checks
-- Separate worker node addition process
+- **High Availability**: Multi-server RKE2 cluster setup
+- **Network**: 
+  - CNI support (Canal, Cilium, Calico)
+  - Load balancing (MetalLB, kube-vip)
+  - Ingress (NGINX, Traefik)
+- **Storage**: NFS CSI driver integration
+- **Security**: 
+  - TLS certificate management with cert-manager
+  - Let's Encrypt integration with HTTP01 and DNS01 challenge support
+  - Wildcard certificate support
+- **Monitoring**: 
+  - Prometheus stack
+  - Grafana
+  - Loki logging
+- **GPU Support**: NVIDIA GPU operator integration
+- **Applications**:
+  - Langfuse deployment support
+  - MinIO object storage (optional)
 
 ## Prerequisites
 
-### System Requirements
 - Ansible 2.9+
-- Target nodes with:
-  - Minimum 4GB RAM
-  - Minimum 2 vCPUs
-  - Linux OS (RHEL 8+, Ubuntu 20.04+)
-  - SSH access
-  - Sudo privileges
+- SSH access to target nodes
+- Sudo privileges on target nodes
+- DNS records configured for your domain
+- (Optional) DNS provider API credentials for wildcard certificates
 
-### Network Requirements
-- All nodes must be able to communicate with each other
-- Required ports:
-  - 6443: Kubernetes API Server
-  - 9345: RKE2 server join
-  - 8472: VXLAN (Canal/Flannel)
-  - 10250: Kubelet metrics
-  - 2379-2380: etcd client and peer ports
+## Project Structure
 
-### Air-gapped Requirements (if applicable)
-- Access to a private registry
-- RKE2 installation artifacts:
-  - RKE2 binary
-  - RKE2 images tarball
+```
+ansible-rke2/
+├── inventory/
+│   └── my_setup/
+│       ├── hosts.yml           # Node inventory and SSH configuration
+│       └── group_vars/
+│           └── all.yml         # Main configuration variables
+├── roles/
+│   ├── server/                 # RKE2 server setup
+│   │   ├── tasks/
+│   │   │   ├── main.yml       # Main server tasks
+│   │   │   ├── cni.yml        # CNI configuration
+│   │   │   ├── kubevip.yml    # kube-vip setup
+│   │   │   └── metallb.yml    # MetalLB setup
+│   │   └── templates/
+│   │       └── config.yaml.j2 # RKE2 server config
+│   ├── agent/                  # RKE2 agent setup
+│   │   ├── tasks/
+│   │   │   └── main.yml       # Agent node tasks
+│   │   └── templates/
+│   │       └── config.yaml.j2 # RKE2 agent config
+│   └── post_server/           # Post-installation components
+│       ├── tasks/
+│       │   ├── main.yml
+│       │   └── cert-manager.yml
+│       └── templates/
+│           ├── cert-manager.yml.j2
+│           ├── cert-manager-issuer.yml.j2
+│           └── langfuse.yml.j2
+```
 
 ## Configuration
 
-1. Update `inventory/hosts.yml` with your server and worker node details:
-   ```yaml
-   rke2_servers:
-     hosts:
-       rke2-server-1:
-       rke2-server-2:
-       rke2-server-3:
-   rke2_agents:
-     hosts:
-       rke2-agent-1:
-       # Add more worker nodes as needed
-   ```
+### Main Configuration (group_vars/all.yml)
 
-2. Modify `group_vars/all.yml` to set:
-   - Deployment mode (air-gapped or internet-connected)
-   - Air gap configuration (if applicable)
-   - Private registry details (if applicable)
-   - RKE2 version (currently set to v1.31.5+rke2r1)
-   - kube-vip virtual IP
-   - MetalLB address pool
-   - Network configuration
-   - Proxy settings (if needed)
+Key configuration sections:
+- RKE2 version and basic setup
+- Network configuration (CNI, load balancers)
+- TLS and certificate management
+- Monitoring stack settings
+- Application-specific configurations
 
-## Deployment Modes
+### Node Configuration (hosts.yml)
 
-### Internet-Connected Deployment
-1. Set `airgap_mode: false` in `group_vars/all.yml`
-2. Deploy the control plane:
+- Server and agent node definitions
+- Node labels and taints
+- SSH access configuration
+
+## Certificate Management
+
+The project supports two types of TLS certificate issuance:
+
+1. **HTTP01 Challenge** (Default)
+   - Individual certificates per domain
+   - No DNS provider configuration needed
+   - Automatic HTTP challenge handling
+
+2. **DNS01 Challenge** (For Wildcards)
+   - Wildcard certificate support
+   - Supported providers:
+     - Cloudflare
+     - GoDaddy
+     - Namecheap
+   - Requires DNS provider API credentials
+
+## Usage
+
+1. Clone the repository:
    ```bash
-   # Basic deployment
-   ansible-playbook site.yml
-
-   # Deploy and copy kubeconfig with VIP
-   ansible-playbook site.yml --tags kubeconfig
-
-   # Deploy and run validation
-   ansible-playbook site.yml --tags validate
-
-   # Deploy with both kubeconfig and validation
-   ansible-playbook site.yml --tags "kubeconfig,validate"
+   git clone <repository-url>
+   cd ansible-rke2
    ```
-3. Add worker nodes (optional):
+
+2. Configure your inventory:
+   - Copy `inventory/my_setup` to `inventory/your-setup`
+   - Update `hosts.yml` with your node information
+   - Modify `group_vars/all.yml` with your desired configuration
+
+3. Run the playbook:
    ```bash
-   ansible-playbook add_workers.yml
+   ansible-playbook -i inventory/your-setup/hosts.yml site.yml
    ```
 
-### Air-Gapped Deployment
-1. Download RKE2 artifacts on a node with internet access:
-   ```bash
-   # Set the RKE2 version
-   export RKE2_VERSION="v1.31.5+rke2r1"
-   
-   # Download artifacts
-   curl -OL https://github.com/rancher/rke2/releases/download/${RKE2_VERSION}/rke2-images.linux-amd64.tar.gz
-   curl -OL https://github.com/rancher/rke2/releases/download/${RKE2_VERSION}/rke2.linux-amd64.tar.gz
-   ```
+## Current Status
 
-2. Transfer artifacts to your air-gapped environment
+- [x] Basic RKE2 cluster deployment
+- [x] High availability setup
+- [x] CNI integration
+- [x] Load balancer setup
+- [x] Certificate management
+- [x] Monitoring stack
+- [x] GPU operator support
+- [x] NFS CSI driver
+- [x] Langfuse application deployment
+- [ ] Air-gapped installation support (in progress)
+- [ ] Backup and disaster recovery
+- [ ] Cluster upgrade automation
 
-3. Set `airgap_mode: true` in `group_vars/all.yml` and configure:
-   - `rke2_artifact_path`
-   - `private_registry_url`
-   - Other air-gap related settings
+## Contributing
 
-4. Deploy the cluster:
-   ```bash
-   # Basic deployment
-   ansible-playbook site.yml
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-   # Deploy and copy kubeconfig with VIP
-   ansible-playbook site.yml --tags kubeconfig
+## License
 
-   # Deploy with validation
-   ansible-playbook site.yml --tags validate
-   ```
-
-## Optional Features
-
-### Kubeconfig Management
-To get the kubeconfig file configured with the kube-vip address:
-```bash
-# During deployment
-ansible-playbook site.yml --tags kubeconfig
-
-# After deployment
-ansible-playbook site.yml --tags kubeconfig --skip-tags never
-```
-
-The kubeconfig will be:
-- Copied to `./kubeconfig`
-- Configured to use the kube-vip address
-- Set with proper permissions (0600)
-- Ready to use with kubectl
-
-### Cluster Validation
-To validate the cluster status:
-```bash
-# During deployment
-ansible-playbook site.yml --tags validate
-
-# After deployment
-ansible-playbook site.yml --tags validate --skip-tags never
-```
-
-The validation will check:
-- Node status
-- Pod status across all namespaces
-- Component health
-- Add-on deployment status
-
-### Worker Node Management
-The `add_workers.yml` playbook allows you to add worker nodes to an existing cluster:
-
-1. Add worker nodes to inventory under `rke2_agents` group
-2. Run the worker addition playbook:
-   ```bash
-   ansible-playbook add_workers.yml
-   ```
-
-Worker node deployment tags:
-```bash
-# Run only prerequisite checks
-ansible-playbook add_workers.yml --tags prereq
-
-# Run only agent installation
-ansible-playbook add_workers.yml --tags agent
-```
-
-## LXC VM Management
-
-### Prerequisites
-- LXD installed on the host machine
-- Proper network configuration
-- SSH key pair for VM access
-
-### Configuration
-Update `group_vars/all.yml` VM configuration:
-```yaml
-vm_config:
-  vm_prefix: "rke2-server"
-  vm_count: 3
-  vm_cpu: 2
-  vm_memory: "4GiB"
-  vm_disk: "8GiB"
-  username: "rke2"
-  password: "rke2@123"
-  timezone: "Asia/Dubai"
-  network_interface: "enp5s0"
-  storage_pool: "default"
-```
-
-### Creating VMs
-To create the RKE2 server and agent VMs:
-```bash
-# Create all VMs (3 servers + 1 agent)
-ansible-playbook -i inventory/vm_host.yml lxc.yml --tags create
-
-# Verify VM creation
-lxc list
-```
-
-### Deleting VMs
-To delete the RKE2 server and agent VMs:
-```bash
-# Delete all VMs
-ansible-playbook -i inventory/vm_host.yml lxc.yml --tags delete
-```
-
-## Verification
-
-1. Check node connectivity:
-   ```bash
-   ansible all -m ping
-   ```
-
-2. Run prerequisite checks:
-   ```bash
-   ansible-playbook site.yml --tags prereq
-   ```
-
-3. Verify cluster status:
-   ```bash
-   export KUBECONFIG=${PWD}/kubeconfig
-   kubectl get nodes
-   ```
-
-4. Check high-availability components:
-   ```bash
-   # Verify kube-vip
-   kubectl get pods -n kube-system | grep kube-vip
-
-   # Verify MetalLB
-   kubectl get pods -n metallb-system
-   ```
-
-## Directory Structure
-
-```
-.
-├── inventory/
-│   ├── hosts.yml          # Inventory file for all nodes
-│   └── vm_host.yml        # VM host inventory
-├── group_vars/
-│   └── all.yml           # Global variables
-├── roles/
-│   ├── common/           # System prerequisites and checks
-│   ├── lxc/             # LXC/LXD VM management
-│   └── rke2/
-│       ├── server/      # Control plane configuration
-│       └── agent/       # Worker node configuration
-├── add_workers.yml       # Worker node addition playbook
-├── site.yml             # Main cluster deployment playbook
-├── lxc.yml              # LXC VM management playbook
-└── README.md
-```
-
-## Notes
-
-- The kube-vip virtual IP (VIP) must be accessible from all nodes
-- MetalLB address pool should not conflict with existing network services
-- For production deployments, ensure proper security measures are in place
-- In air-gapped mode, ensure all required images are available in your private registry
-- System prerequisites are automatically checked before deployment
-- Worker nodes can be added at any time after the control plane is ready
-- The cluster automatically verifies node readiness during deployment
-- Optional features can be enabled using appropriate tags
-- Use `--skip-tags never` when running tagged tasks after initial deployment
-- LXC VMs can be managed using the `lxc.yml` playbook with appropriate tags
-- VM configuration can be customized in `group_vars/all.yml` 
+This project is licensed under the MIT License - see the LICENSE file for details. 
