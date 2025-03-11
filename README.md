@@ -39,9 +39,7 @@ ansible-rke2/
 │   ├── my_setup/              # Your cluster configuration
 │   │   ├── hosts.yml         # Node inventory and SSH configuration
 │   │   └── group_vars/       # Variable files
-│   │       ├── all.yml       # Common variables
-│   │       ├── infra.yml     # Infrastructure-specific variables
-│   │       └── apps.yml      # Application-specific variables
+│   │       └── all.yml       # All configuration variables
 │   └── sample/               # Example configurations
 ├── roles/
 │   ├── server/               # RKE2 server setup
@@ -57,21 +55,19 @@ ansible-rke2/
 
 ### Variable Structure
 
-The project uses a structured approach to variables:
+All configuration variables are in a single file:
 
-1. **Infrastructure Variables** (`group_vars/infra.yml`):
-   - RKE2 version and configuration
-   - CNI settings
-   - Load balancer configuration
-   - Ingress controller setup
-   - Certificate management
-   - Storage configuration
-
-2. **Application Variables** (`group_vars/apps.yml`):
-   - Kubernetes configurations
-   - Helm settings
-   - Application-specific variables
-   - Service configurations
+**all.yml**:
+- RKE2 version and configuration
+- CNI settings
+- Load balancer configuration
+- Ingress controller setup
+- Certificate management
+- Storage configuration
+- Kubernetes configurations
+- Helm settings
+- Application-specific variables
+- Service configurations
 
 ### Deployment Process
 
@@ -106,7 +102,7 @@ The deployment is split into two main phases:
 2. Configure your environment:
    - Copy `inventory/sample` to `inventory/my_setup`
    - Update `hosts.yml` with your node information
-   - Modify `group_vars/infra.yml` and `group_vars/apps.yml` with your configurations
+   - Modify `group_vars/all.yml` with your configurations
 
 3. Deploy the infrastructure:
    ```bash
