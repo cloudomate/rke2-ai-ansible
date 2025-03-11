@@ -1,0 +1,31 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ app.name }}
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: {{ app.name }}
+  namespace: {{ app.name }}
+spec:
+{% if app.use_local_chart | default(true) %}
+  # For local chart
+  chart: {{ playbook_dir }}/../{{ app.name }}
+{% else %}
+  # For GitHub-hosted chart
+  repo: {{ app.chart_repo }}
+  chart: {{ app.name }}
+  version: {{ app.chart_version }}
+{% endif %}
+  targetNamespace: {{ app.name }}
+  createNamespace: false
+  valuesContent: |-
+    ui:
+      ingress:
+        enabled: {{ app.ingress.enabled }}
+        className: {{ ingress.class_name }}
+        host: {{ app.name }}.{{ app.domain }}
+        tls: {{ app.ingress.tls }}
+{{ app.values | to_nice_yaml(indent=4) | indent(4, True) }} 

@@ -1,0 +1,87 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ langfuse_namespace }}
+---
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: {{ langfuse_secret_name }}
+  namespace: {{ langfuse_namespace }}
+stringData:
+  {{ salt_key_name }}: {{ langfuse.salt }}
+  {{ encryption_key_name }}: {{ langfuse.encryption_key }}
+  {{ nextauth_secret_name }}: {{ langfuse.nextauth_secret }}
+  {{ postgresql_password_name }}: {{ langfuse.postgresql_password }}
+  {{ clickhouse_password_name }}: {{ langfuse.clickhouse_password }}
+  {{ redis_password_name }}: {{ langfuse.redis_password }}
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: langfuse
+  namespace: {{ langfuse_namespace }}
+spec:
+  repo: https://langfuse.github.io/langfuse-k8s
+  chart: langfuse
+  createNamespace: false
+  version: {{ langfuse.chart_version }}
+  valuesContent: |-
+    langfuse:
+      salt:
+        secretKeyRef:
+          name: {{ langfuse_secret_name }}
+          key: {{ salt_key_name }}
+      encryptionKey:
+        secretKeyRef:
+          name: {{ langfuse_secret_name }}
+          key: {{ encryption_key_name }}
+      nextauth:
+        secret:
+          secretKeyRef:
+            name: {{ langfuse_secret_name }}
+            key: {{ nextauth_secret_name }}
+{% if langfuse.ingress.enabled %}     
+      ingress:
+        enabled: {{ langfuse.ingress.enabled }}
+        className: "{{ ingress.class_name }}"
+        annotations:
+{% if cert_manager.enabled %}
+          cert-manager.io/cluster-issuer: "letsencrypt-{{ cert_manager.letsencrypt.env }}"
+{% if ingress.class_name == "nginx" %}
+          nginx.ingress.kubernetes.io/ssl-redirect:"false"
+          nginx.ingress.kubernetes.io/force-ssl-redirect:"false"
+{% endif %}
+{% endif %}
+        hosts:
+          - host: "{{ langfuse_host }}"
+            paths:
+              - path: /
+                pathType: ImplementationSpecific
+        tls:
+{% if langfuse.ingress.tls %}
+          enabled: true
+          secretName: "{{ langfuse_secret_name }}-tls"
+{% else %}
+          enabled: false
+{% endif %}
+{% endif %}
+    postgresql:
+       auth:
+        existingSecret: {{ langfuse_secret_name }}
+        secretKeys:
+          adminPasswordKey: {{ postgresql_password_name }}
+          userPasswordKey: {{ postgresql_password_name }}
+    clickhouse:
+      zookeeper:
+        replicaCount: {{ langfuse.clickhouse.zookeeper.replicaCount | default(3) }}
+      replicaCount: {{ langfuse.clickhouse.replicaCount | default(3) }}
+      auth:
+        existingSecret: {{ langfuse_secret_name }}
+        existingSecretKey: {{ clickhouse_password_name }}
+    redis:
+      auth:
+        existingSecret: {{ langfuse_secret_name }}
+        existingSecretPasswordKey: {{ redis_password_name }}

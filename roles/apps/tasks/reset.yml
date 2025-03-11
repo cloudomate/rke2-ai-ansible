@@ -1,0 +1,16 @@
+---
+- name: delete helm release using helm
+  ansible.builtin.command: >
+    kubectl --kubeconfig {{ kubeconfig_path }} delete helm langfuse -n {{ langfuse_namespace }}
+  delegate_to: localhost
+  tags:
+    - langfuse
+    - never
+
+- name: delete langfuse namespace
+  ansible.builtin.command: >
+    kubectl --kubeconfig {{ kubeconfig_path }} delete namespace {{ langfuse_namespace }}
+  delegate_to: localhost
+  tags:
+    - langfuse
+    - never

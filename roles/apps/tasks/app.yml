@@ -1,0 +1,40 @@
+---
+# Create temp directory locally
+- name: Create temporary directory for manifests
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: app
+  register: temp_dir
+  delegate_to: localhost
+  tags:
+    - app
+
+# Generate HelmChart manifest locally
+- name: Generate HelmChart manifest
+  ansible.builtin.template:
+    src: app.yml.j2
+    dest: "{{ temp_dir.path }}/app-helm.yaml"
+    mode: '0644'
+  delegate_to: localhost
+  tags:
+    - app
+
+# Apply HelmChart manifest using kubectl
+- name: Apply app HelmChart
+  ansible.builtin.command: >
+    kubectl --kubeconfig {{ kubeconfig_path }} 
+    apply -f {{ temp_dir.path }}/app-helm.yaml
+  delegate_to: localhost
+  register: apply_result
+  changed_when: "'created' in apply_result.stderr or 'configured' in apply_result.stderr"
+  tags:
+    - app
+
+# Clean up temp directory
+- name: Remove temporary directory
+  ansible.builtin.file:
+    path: "{{ temp_dir.path }}"
+    state: absent
+  delegate_to: localhost
+  tags:
+    - app

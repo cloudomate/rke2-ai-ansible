@@ -23,3 +23,18 @@
           - "- Agents reset: {{ groups['rke2_agents'] | default([]) | join(', ') }}"
           - "- Inventory file removed"
       run_once: true 
+  
+- name: Reset Applications
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Reset apps
+      include_role:
+        name: apps
+        tasks_from: reset
+      vars:
+        kubeconfig_path: "{{ lookup('env', 'HOME') }}/.kube/config"
+      tags:
+        - langfuse
+        - apps

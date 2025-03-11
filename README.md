@@ -8,7 +8,7 @@ This Ansible project automates the deployment of a highly available RKE2 Kuberne
 - **Network**: 
   - CNI support (Canal, Cilium, Calico)
   - Load balancing (MetalLB, kube-vip)
-  - Ingress (NGINX, Traefik)
+  - Ingress (NGINX, Traefik, Kong Ingress Controller)
 - **Storage**: NFS CSI driver integration
 - **Security**: 
   - TLS certificate management with cert-manager
@@ -36,89 +36,64 @@ This Ansible project automates the deployment of a highly available RKE2 Kuberne
 ```
 ansible-rke2/
 ├── inventory/
-│   └── my_setup/
-│       ├── hosts.yml           # Node inventory and SSH configuration
-│       └── group_vars/
-│           └── all.yml         # Main configuration variables
+│   ├── my_setup/              # Your cluster configuration
+│   │   ├── hosts.yml         # Node inventory and SSH configuration
+│   │   └── group_vars/       # Variable files
+│   │       ├── all.yml       # Common variables
+│   │       ├── infra.yml     # Infrastructure-specific variables
+│   │       └── apps.yml      # Application-specific variables
+│   └── sample/               # Example configurations
 ├── roles/
-│   ├── server/                 # RKE2 server setup
-│   │   ├── tasks/
-│   │   │   ├── main.yml       # Main server tasks
-│   │   │   ├── cni.yml        # CNI configuration
-│   │   │   ├── kubevip.yml    # kube-vip setup
-│   │   │   └── metallb.yml    # MetalLB setup
-│   │   └── templates/
-│   │       └── config.yaml.j2 # RKE2 server config
-│   │       └── kubevip.yaml.j2    # kubevip setup
-│   │       └── metallb.yaml.j2    # MetalLB setup
-│   │       └── canal-config.yaml.j2    # Canal config
-│   ├── agent/                  # RKE2 agent setup
-│   │   ├── tasks/
-│   │   │   └── main.yml       # Agent node tasks
-│   │   └── templates/
-│   │       └── config.yaml.j2 # RKE2 agent config
-│   └── post_server/           # Post-installation components
-│       ├── tasks/
-│       │   ├── main.yml
-│       │   └── cert-manager.yml
-│       │   └── langfuse.yml
-│       │   └── minio.yml
-│       │   └── prometheus.yml
-│       │   └── grafana.yml
-│       │   └── loki.yml
-│       │   └── gpu.yml
-│       │   └── nfs.yml
-│       │   └── csi-nfs.yml
-│       │   └── metallb.yml
-│       │   └── ingress.yml
-│       └── templates/
-│           ├── cert-manager.yml.j2
-│           ├── cert-manager-issuer.yml.j2
-│           ├── langfuse.yml.j2
-│           ├── minio.yml.j2
-│           ├── kic.yml.j2
-│           ├── grafana.yml.j2
-│           ├── loki.yml.j2
-│           ├── metallb.yml.j2
-│           ├── csi-nfs.yml.j2
-│           ├── gpu-operator.yml.j2
-│           ├── ingress-nginx.yml.j2
-│           ├── monitoring.yml.j2
+│   ├── server/               # RKE2 server setup
+│   ├── agent/                # RKE2 agent setup
+│   ├── post_server/          # Post-installation components
+│   └── apps/                 # Application deployment
+├── site.yml                  # Main playbook for infrastructure
+├── add_workers.yml           # Playbook for adding worker nodes
+└── reset.yml                 # Cluster reset playbook
 ```
 
 ## Configuration
 
-### Main Configuration (group_vars/all.yml)
+### Variable Structure
 
-Key configuration sections:
-- RKE2 version and basic setup
-- Network configuration (CNI, load balancers)
-- TLS and certificate management
-- Monitoring stack settings
-- Application-specific configurations
+The project uses a structured approach to variables:
 
-### Node Configuration (hosts.yml)
+1. **Infrastructure Variables** (`group_vars/infra.yml`):
+   - RKE2 version and configuration
+   - CNI settings
+   - Load balancer configuration
+   - Ingress controller setup
+   - Certificate management
+   - Storage configuration
 
-- Server and agent node definitions
-- Node labels and taints
-- SSH access configuration
+2. **Application Variables** (`group_vars/apps.yml`):
+   - Kubernetes configurations
+   - Helm settings
+   - Application-specific variables
+   - Service configurations
 
-## Certificate Management
+### Deployment Process
 
-The project supports two types of TLS certificate issuance:
+The deployment is split into two main phases:
 
-1. **HTTP01 Challenge** (Default)
-   - Individual certificates per domain
-   - No DNS provider configuration needed
-   - Automatic HTTP challenge handling
+1. **Infrastructure Setup** (`site.yml`):
+   ```yaml
+   - name: Deploy RKE2 Infrastructure
+     hosts: all
+     roles:
+       - server    # RKE2 server setup
+       - agent     # RKE2 agent setup
+       - post_server # Post-installation components
+   ```
 
-2. **DNS01 Challenge** (For Wildcards)
-   - Wildcard certificate support
-   - Supported providers:
-     - Cloudflare
-     - GoDaddy
-     - Namecheap
-   - Requires DNS provider API credentials
+2. **Application Deployment** (`site.yml`):
+   ```yaml
+   - name: Deploy Applications
+     hosts: localhost
+     roles:
+       - apps      # Application deployment
+   ```
 
 ## Usage
 
@@ -128,15 +103,45 @@ The project supports two types of TLS certificate issuance:
    cd ansible-rke2
    ```
 
-2. Configure your inventory:
-   - Copy `inventory/my_setup` to `inventory/your-setup`
+2. Configure your environment:
+   - Copy `inventory/sample` to `inventory/my_setup`
    - Update `hosts.yml` with your node information
-   - Modify `group_vars/all.yml` with your desired configuration
+   - Modify `group_vars/infra.yml` and `group_vars/apps.yml` with your configurations
 
-3. Run the playbook:
+3. Deploy the infrastructure:
    ```bash
-   ansible-playbook -i inventory/your-setup/hosts.yml site.yml
+   ansible-playbook -i inventory/my_setup/hosts.yml site.yml --tags infra
    ```
+
+4. Deploy applications:
+   ```bash
+   ansible-playbook -i inventory/my_setup/hosts.yml site.yml --tags apps
+   ```
+
+5. (Optional) Add worker nodes:
+   ```bash
+   ansible-playbook -i inventory/my_setup/hosts.yml add_workers.yml
+   ```
+
+## Certificate Management
+
+The project supports two types of TLS certificate issuance:
+
+1. **HTTP01 Challenge** (Default)
+   - Requires proper ingress configuration
+   - Port 80 must be accessible
+   - Annotations required:
+     ```yaml
+     annotations:
+       cert-manager.io/cluster-issuer: "letsencrypt-production"
+       nginx.ingress.kubernetes.io/ssl-redirect: "false"
+       nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+     ```
+
+2. **DNS01 Challenge**
+   - Suitable for wildcard certificates
+   - No port forwarding required
+   - Requires DNS provider API credentials
 
 ## Current Status
 
@@ -149,7 +154,8 @@ The project supports two types of TLS certificate issuance:
 - [x] GPU operator support
 - [x] NFS CSI driver
 - [x] Langfuse application deployment
-- [ ] Air-gapped installation support (in progress)
+- [x] Structured variable management
+- [ ] Air-gapped installation support
 - [ ] Backup and disaster recovery
 - [ ] Cluster upgrade automation
 

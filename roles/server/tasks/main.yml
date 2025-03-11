@@ -41,9 +41,8 @@
     - cni.type is defined
     - inventory_hostname == groups['rke2_servers'][0]
 
-# Non-air-gap mode installation
+
 - name: Download RKE2 installer script
-  when: not airgap_mode
   get_url:
     url: https://get.rke2.io
     dest: /tmp/rke2-install.sh
@@ -51,8 +50,7 @@
   register: download_installer
   become: true
 
-- name: Install RKE2 server in non-air-gap mode
-  when: not airgap_mode
+- name: Install RKE2 server 
   shell: |
     INSTALL_RKE2_VERSION={{ rke2_config.version }} /tmp/rke2-install.sh
     systemctl enable rke2-server

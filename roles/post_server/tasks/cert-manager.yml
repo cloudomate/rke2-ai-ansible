@@ -26,7 +26,7 @@
   ansible.builtin.command: >
     {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }}
     --kubeconfig {{kubeconfig_path}} wait --for=condition=Ready pods 
-    -l app.kubernetes.io/name=cert-manager -n cert-manager --timeout=300s
+    -l app.kubernetes.io/name=cert-manager -n cert-manager --timeout=220s
   run_once: true
   become: true
 
@@ -37,6 +37,8 @@
     -l app.kubernetes.io/name=webhook -n cert-manager --timeout=300s
   run_once: true
   become: true
+  retries: 30
+  delay: 15
 
 - name: Wait for cert-manager cainjector to be ready
   ansible.builtin.command: >
@@ -45,6 +47,8 @@
     -l app.kubernetes.io/name=cainjector -n cert-manager --timeout=300s
   run_once: true
   become: true
+  retries: 30
+  delay: 15
 
 # Configure issuer for certificates
 - name: Copy cert-manager issuer configuration
@@ -54,14 +58,10 @@
     owner: "{{ ansible_user_id }}"
     mode: "0755"
   run_once: true
-  when: 
-    - cert_manager.letsencrypt.enabled | bool
 
-- name: Apply cert-manager DNS issuer configuration
+- name: Apply cert-manager issuer configuration
   ansible.builtin.command: >
     {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }}
     --kubeconfig {{kubeconfig_path}} apply -f /tmp/rke2/cert-manager-issuer.yml
   run_once: true
   become: true
-  when: 
-    - cert_manager.letsencrypt.enabled | bool

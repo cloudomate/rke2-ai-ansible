@@ -44,13 +44,13 @@
     - kube_prometheus_stack.enabled | default(false) | bool
   run_once: true
 
-- name: Install langfuse
-  ansible.builtin.include_tasks: langfuse.yml
+- name: Install minio
+  ansible.builtin.include_tasks: minio.yml
   when:
     - inventory_hostname == groups['rke2_servers'][0]
-    - langfuse.enabled | default(false) | bool
+    - minio.enabled | default(false) | bool
   run_once: true
-  
+
 - name: Remove tmp directory used for manifests
   ansible.builtin.file:
     path: /tmp/rke2

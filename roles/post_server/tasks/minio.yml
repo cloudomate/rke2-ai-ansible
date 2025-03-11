@@ -1,0 +1,23 @@
+---
+- name: Create manifests directory for temp configuration
+  ansible.builtin.file:
+    path: /tmp/rke2
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  run_once: true
+
+- name: Copy minio manifest to first master
+  ansible.builtin.template:
+    src: minio.yml.j2
+    dest: /tmp/rke2/minio.yml
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  run_once: true
+
+- name: Install ingress controller
+  ansible.builtin.command: >
+    {{ rke2_kubectl_binary | default('/var/lib/rancher/rke2/bin/kubectl') }} 
+    --kubeconfig {{kubeconfig_path}} apply -f /tmp/rke2/minio.yml
+  run_once: true
+  become: true

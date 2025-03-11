@@ -1,0 +1,22 @@
+---
+# Set kubeconfig path
+- name: Set kubeconfig path
+  ansible.builtin.set_fact:
+    kubeconfig_path: "{{ kubeconfig_path | default('/etc/rancher/rke2/rke2.yaml') }}"
+
+# Include application-specific tasks
+- name: Deploy app
+  ansible.builtin.include_tasks: app.yml
+  when: app.enabled | default(false)
+  tags:
+    - app
+    - apps
+    - never
+
+- name: Deploy langfuse
+  ansible.builtin.include_tasks: langfuse.yml
+  when: langfuse.enabled | default(false)
+  tags:
+    - langfuse
+    - apps
+    - never

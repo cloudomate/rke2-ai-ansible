@@ -11,9 +11,6 @@ tls-san:
 {% for host in groups['rke2_servers'] %}
   - {{ hostvars[host].ansible_host }}
 {% endfor %}
-{% if airgap_mode %}
-system-default-registry: {{ private_registry_url }}
-{% endif %}
 write-kubeconfig-mode: {{ rke2_config['write-kubeconfig-mode'] | default('0644') }}
 cni: {{ cni.type }}
 cluster-cidr: {{ rke2_config.pod_cidr }}

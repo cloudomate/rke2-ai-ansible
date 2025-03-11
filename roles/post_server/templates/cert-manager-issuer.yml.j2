@@ -1,83 +1,25 @@
----
-{% if cert_manager.letsencrypt.use_wildcard and cert_manager.letsencrypt.dns.provider == "cloudflare" %}
-apiVersion: v1
-kind: Secret
-metadata:
-  name: cloudflare-api-token-secret
-  namespace: cert-manager
-type: Opaque
-stringData:
-  api-token: {{ cert_manager.letsencrypt.dns.cloudflare.api_token }}
-{% elif cert_manager.letsencrypt.use_wildcard and cert_manager.letsencrypt.dns.provider == "godaddy" %}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: godaddy-api-secret
-  namespace: cert-manager
-type: Opaque
-stringData:
-  api-key: {{ cert_manager.letsencrypt.dns.godaddy.api_key }}
-  api-secret: {{ cert_manager.letsencrypt.dns.godaddy.api_secret }}
-{% elif cert_manager.letsencrypt.use_wildcard and cert_manager.letsencrypt.dns.provider == "namecheap" %}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: namecheap-api-secret
-  namespace: cert-manager
-type: Opaque
-stringData:
-  api-key: {{ cert_manager.letsencrypt.dns.namecheap.api_key }}
-  api-username: {{ cert_manager.letsencrypt.dns.namecheap.username }}
-{% endif %}
----
+# cert-manager issuer configuration
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
-  name: letsencrypt-prod
+  name: letsencrypt-{{ letsencrypt_env }}
 spec:
   acme:
     email: {{ cert_manager.letsencrypt.email }}
-    server: {{ cert_manager.letsencrypt.production.server }}
+    server: {{ letsencrypt_server }}
     privateKeySecretRef:
-      name: letsencrypt-prod-account-key
+      name: letsencrypt-{{ letsencrypt_env }}-account-key
     solvers:
+{% if cert_manager.solver == "http" %}
     - http01:
-        ingress:
-          class: {{ingress.className}}
-{% if cert_manager.letsencrypt.use_wildcard %}
-    - dns01:
-{% if cert_manager.letsencrypt.dns.provider == "cloudflare" %}
-        cloudflare:
-          email: {{ cert_manager.letsencrypt.dns.cloudflare.email }}
-          apiTokenSecretRef:
-            name: cloudflare-api-token-secret
-            key: api-token
-{% elif cert_manager.letsencrypt.dns.provider == "godaddy" %}
-        webhook:
-          groupName: cert-manager-webhook-godaddy.jhouse.com
-          solverName: godaddy
-          config:
-            apiKeySecretRef:
-              name: godaddy-api-secret
-              key: api-key
-            apiSecretSecretRef:
-              name: godaddy-api-secret
-              key: api-secret
-{% elif cert_manager.letsencrypt.dns.provider == "namecheap" %}
-        webhook:
-          groupName: cert-manager-webhook-namecheap.namecheap.com
-          solverName: namecheap
-          config:
-            apiKeySecretRef:
-              name: namecheap-api-secret
-              key: api-key
-            apiUsernameSecretRef:
-              name: namecheap-api-secret
-              key: api-username
+        ingress:    
+          ingressClassName: {{ ingress.class_name }}
+{% if ingress.class_name == "nginx" %}
+          ingressTemplate:
+            metadata:
+              annotations:
+                nginx.ingress.kubernetes.io/ssl-redirect: "false"
+                nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+                nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
 {% endif %}
-      selector:
-        dnsZones:
-          - "{{ app.domain }}"
-{% endif %} 
+{% endif %}
